@@ -37,12 +37,15 @@ CPPFLAGS= -g -Os -w -std=gnu++11 -fpermissive -fno-exceptions -ffunction-section
 PROGRAM=MyFreeRTOSBlinkTest
 
 
-all: ${PROGRAM}.elf ${PROGRAM}.hex 
+all: arduinoLibsAndCore/libres.a ${PROGRAM}.elf ${PROGRAM}.hex 
 	rm -f *.d
 
 
-${PROGRAM}.elf: Build/timers.o Build/tasks.o Build/queue.o Build/list.o Build/croutine.o Build/heap_1.o Build/port.o Build/Wire.o Build/main.o Build/twi.o 
+${PROGRAM}.elf: arduinoLibsAndCore/libres.a Build/timers.o Build/tasks.o Build/queue.o Build/list.o Build/croutine.o Build/heap_1.o Build/port.o Build/Wire.o Build/main.o Build/twi.o 
 	${CPP} -w -Os -g -flto -fuse-linker-plugin -Wl,--gc-sections ${INCLUDES} ${MMCU} $^ -o ${BUILD_DIR}/$@ -static -L./arduinoLibsAndCore -lres
+
+arduinoLibsAndCore/libres.a:
+	${MAKE} -C arduinoLibsAndCore
 
 
 Build/%.o: %.c

@@ -69,7 +69,7 @@
  *----------------------------------------------------------*/
 
 #define configUSE_PREEMPTION		1
-//MODIFIED by Julien Deantoni --> no idle hook function required
+
 #define configUSE_IDLE_HOOK			0                             
 #define configUSE_TICK_HOOK			0
 #define configCPU_CLOCK_HZ			( ( unsigned long ) F_CPU )
@@ -84,7 +84,7 @@
 #define configQUEUE_REGISTRY_SIZE	0
 
 
-/*done by julien deantoni*/
+
 #define configUSE_MUTEXES               1
 #define configUSE_COUNTING_SEMAPHORES   1
 
