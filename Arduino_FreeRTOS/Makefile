@@ -41,7 +41,7 @@ all: ${PROGRAM}.elf ${PROGRAM}.hex
 	rm -f *.d
 
 
-${PROGRAM}.elf: Build/timers.o Build/tasks.o Build/queue.o Build/list.o Build/croutine.o Build/heap_1.o Build/port.o Build/Wire.o Build/main.o Build/twi.o 
+${PROGRAM}.elf: Build/timers.o Build/tasks.o Build/queue.o Build/list.o Build/croutine.o Build/heap_1.o Build/port.o Build/main.o
 	${CPP} -w -Os -g -flto -fuse-linker-plugin -Wl,--gc-sections ${INCLUDES} ${MMCU} $^ -o ${BUILD_DIR}/$@ -static -L./arduinoLibsAndCore -lres
 
 arduinoLibsAndCore/libres.a:
