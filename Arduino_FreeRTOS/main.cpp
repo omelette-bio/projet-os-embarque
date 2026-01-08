@@ -81,10 +81,7 @@ unsigned char uart_receive(void)
 }
 
 // Vérifier si des données sont disponibles en réception
-int uart_available(void)
-{
-    return (UCSR0A & (1 << RXC0));
-}
+int uart_available(void) { return (UCSR0A & (1 << RXC0)); }
 
 void clearBufferArray()
 {
@@ -212,10 +209,7 @@ static void WaitingTask(void *pvParameters)
         { // Si des données arrivent sur le port série
             count = 0;
             // Lecture des données dans le tableau (lecture en rafale)
-            while (uart_available() && count < BUFFER_SIZE)
-            {
-                buffer[count++] = uart_receive();
-            }
+            while (uart_available() && count < BUFFER_SIZE) { buffer[count++] = uart_receive(); }
 
             // Écriture du tampon (envoi en rafale au PC)
             for (int i = 0; i < count; i++)

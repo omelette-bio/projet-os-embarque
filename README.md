@@ -1,24 +1,18 @@
 # projet-os-embarque
 
-## Arduino_FreeRTOS Pin Mapping
+- je me rappelle plus comment on setup le projet cote arduino
 
-This project targets an Arduino Uno (ATmega328P) and uses direct port/register access. The relevant pin-to-port mappings are:
+## demarrer et tester le broker mqtt
 
-- Door LED: `PD2` (Arduino D2, output)
-- Green LED: `PD4` (Arduino D4, output)
-- Ultrasound sensor echo/input: `PD6` (Arduino D6, input)
-- RFID reader input: `PB0` (Arduino D8, input)
-- Master device input: `PB2` (Arduino D10, input)
-
-Note: Arduino Uno does not have `PD8`/`PD10`; if you intend to reference Arduino digital pins 8 and 10 via registers, use `PB0` and `PB2` respectively.
-
-## Build
-
-From `Arduino_FreeRTOS/`:
-
-```bash
-make clean
-make
 ```
-
-Artifacts are generated under `Arduino_FreeRTOS/Build/` (`.elf` and `.hex`).
+cd mqtt_broker
+docker compose up -d
+```
+écouter les messages sur le topic `topix`
+```
+docker exec -it mosquitto mosquitto_sub -t "topix"
+```
+envoyer le message `msg` sur le topic `topix`
+```
+docker exec -it mosquitto mosquitto_pub -t "topix" -m "msg"
+```
