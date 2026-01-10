@@ -21,3 +21,5 @@
 1767901849: New connection from ::1:45886 on port 1883.
 1767901849: New client connected from ::1:45886 as auto-C4897C30-A2FF-4CDB-89A8-9321EF05C785 (p2, c1, k60).
 1767901849: Client auto-C4897C30-A2FF-4CDB-89A8-9321EF05C785 disconnected.
+1767902163: mosquitto version 2.0.22 terminating
+1767902163: Saving in-memory database to /mosquitto/data//mosquitto.db.
