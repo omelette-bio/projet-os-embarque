@@ -2,3 +2,4 @@ Build/
 Arduino_FreeRTOS/arduinoLibsAndCore
 Arduino_FreeRTOS/FreeRTOS-Kernel
 .vscode/
+*/.venv

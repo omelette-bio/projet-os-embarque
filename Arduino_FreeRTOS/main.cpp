@@ -1,310 +1,295 @@
 // Arduino uno with base shield extension using FreeRTOS
 /*  FreeRTOS V202112.00 */
 
+#define BAUD 9600
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include "FreeRTOS-Kernel/include/FreeRTOS.h" /* RTOS kernel functions. */
 #include "task.h"                             /* RTOS task related API prototypes. */
 #include "semphr.h"                           /* Semaphore related API prototypes. */
+#include <Wire.h>
+#include <string.h>
+#include <util/setbaud.h>
 
 #include <util/delay.h>
-#include <avr/interrupt.h>
-// #include <cstring>
 
 #define Idle_Priority (tskIDLE_PRIORITY)
 
 static void RFIDReadTask(void *pvParameters);
-static void TraversalDirectionTask(void *pvParameters);
 static void ActivateActuatorTask(void *pvParameters);
 
-// Configuration
-#define F_CPU 16000000UL // Fréquence d'horloge de 16MHz (Arduino Uno)
-#define BAUD_RATE 9600
-#define UBRR_VALUE ((F_CPU / 16 / BAUD_RATE) - 1) // Calcul du UBRR pour l'UART matériel (9600 bauds)
-#define BIT_PERIOD_US 104                         // Période d'un bit pour 9600 bauds ≈ 104.16 µs
+void receiveEvent(int howMany);
+void requestEvent();
 
-// Définitions des broches SoftSerial
-// #define SOFTSERIAL_RX_PIN PIND6 // Arduino D6 (Broche PD6)
-// #define SOFTSERIAL_TX_PIN PIND7 // Arduino D7 (Broche PD7)
+// Configuration
+// #define F_CPU 16000000UL // Fréquence d'horloge de 16MHz (Arduino Uno)
+// #define BAUD_RATE 9600
+// #define UBRR_VALUE ((F_CPU / 16 / BAUD_RATE) - 1) // Calcul du UBRR pour l'UART matériel (9600 bauds)
+// #define BIT_PERIOD_US 104                         // Période d'un bit pour 9600 bauds ≈ 104.16 µs
 
 // Buffer pour l'UART
-#define BUFFER_SIZE 64
-unsigned char buffer[BUFFER_SIZE];
+#define UID_SIZE 16
+unsigned char buffer[UID_SIZE];
 int count = 0;
 
 // // Définitions de la LED (Ajouté)
 // #define LED_PIN _BV(PD4) // Broche D13 de l'Arduino Uno (Port B, bit 5)
-
+#define IR_EMITTER_A _BV(PD6)
+#define blueLED _BV(PD5)
 // Config I2C
-#define TWI_SLAVE_ADDRESS 0x42 // Adresse I2C de l'Arduino
+#define SLAVE_ADRESS 0x42 // Adresse I2C de l'Arduino
 
 // Variables globales
-#define UID_SIZE 16
 unsigned char current_uid[UID_SIZE] = {0};
 ; // Initialisé à zéro
 volatile uint8_t card_detected = 0;
-
-volatile uint8_t send_card_uid = 0;
-volatile uint8_t send_in = 0;
-volatile uint8_t send_out = 0;
-
-volatile uint8_t twi_command = 0;
-volatile uint8_t twi_data_index = 0;
-
 volatile uint8_t State_IR_A = 0;
-volatile uint8_t State_IR_B = 0;
-
-volatile uint8_t in = 0;
-volatile uint8_t out = 0;
-
+volatile uint8_t nb_passage = 0;
 volatile uint8_t activate_actuator = 0;
+
+class RfidTask
+{
+private:
+    volatile uint8_t _buffer[UID_SIZE];
+    volatile uint8_t _writeIndex;
+    volatile bool _dataReady;
+    volatile bool _isReading;
+
+public:
+    RfidTask() : _writeIndex(0), _dataReady(false), _isReading(false) {}
+
+    // Initialisation de l'UART
+    void init()
+    {
+        // Configuration du Baud Rate (utilisant util/setbaud.h)
+        UBRR0H = UBRRH_VALUE;
+        UBRR0L = UBRRL_VALUE;
+
+        #if USE_2X
+                UCSR0A |= (1 << U2X0);
+        #else
+                UCSR0A &= ~(1 << U2X0);
+        #endif
+
+        // Activer TX et RX, et l'interruption de réception (RXCIE0)
+        UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
+
+        // Format de frame: 8 data, 1 stop bit, pas de parité
+        UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
+    }
+
+    // Méthode appelée par l'ISR pour traiter l'octet entrant
+    void processIncomingByte(uint8_t byte)
+    {
+        const uint8_t STX = 0x02; // Start of Text
+        const uint8_t ETX = 0x03; // End of Text
+
+        if (byte == STX)
+        {
+            // Début de trame : on reset le buffer
+            _writeIndex = 0;
+            _isReading = true;
+            _dataReady = false; // Nouvelle lecture en cours, l'ancienne n'est plus valide
+        }
+        else if (byte == ETX)
+        {
+            // Fin de trame
+            if (_isReading)
+            {
+                _buffer[_writeIndex] = '\0'; // Null-terminate pour string C
+                _dataReady = true;
+                _isReading = false;
+            }
+        }
+        else if (_isReading)
+        {
+            // Lecture des données
+            if (_writeIndex < (UID_SIZE - 1))
+            {
+                _buffer[_writeIndex++] = byte;
+            }
+            else
+            {
+                // Buffer overflow : trame invalide
+                _isReading = false;
+                _writeIndex = 0;
+            }
+        }
+    }
+
+    // Vérifie si un nouvel UID est disponible
+    bool isUidAvailable()
+    {
+        if (_dataReady)
+        {
+            _dataReady = false; // Reset du flag après lecture
+            return true;
+        }
+        return false;
+    }
+
+    // Récupère l'UID (pointeur vers le buffer interne)
+    // Utile pour la future transmission I2C
+    const uint8_t *getUidBuffer()
+    {
+        return (const uint8_t *)_buffer;
+    }
+
+    // Récupère la longueur de l'UID
+    uint8_t getUidLength()
+    {
+        return _writeIndex;
+    }
+};
 
 // =================================================
 // --- 1. Fonctions detection sens de passage IR ---
 // =================================================
 extern "C"
 {
-    IST(INT0_vect)
+    ISR(INT0_vect)
     {
         State_IR_A = 1;
     }
-
-    IST(INT1_vect)
-    {
-        State_IR_B = 1;
-    }
 }
-
 
 // =================================================
 // --- 2. Fonctions d'UART Matériel (Liaison PC) ---
 // =================================================
-void uart_init(void)
+
+// Instanciation globale pour accès dans l'ISR
+RfidTask rfidReader;
+
+// --- Interruption de Réception UART ---
+ISR(USART_RX_vect)
 {
-    // Définir le taux de baud
-    UBRR0H = (unsigned char)(UBRR_VALUE >> 8);
-    UBRR0L = (unsigned char)UBRR_VALUE;
-
-    // Activer l'émetteur et le récepteur
-    UCSR0B = (1 << RXEN0) | (1 << TXEN0);
-
-    // Définir le format de trame : 8 bits de données, pas de parité, 1 bit de stop
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
-}
-
-void uart_transmit(unsigned char data)
-{
-    // Attendre que le tampon de transmission soit vide
-    while (!(UCSR0A & (1 << UDRE0)))
-        ;
-    // Placer les données dans le tampon et les envoyer
-    UDR0 = data;
-}
-
-unsigned char uart_receive(void)
-{
-    // Attendre que les données soient reçues
-    while (!(UCSR0A & (1 << RXC0)))
-        ;
-
-    // Obtenir et retourner les données du tampon
-    return UDR0;
-}
-
-// Vérifier si des données sont disponibles en réception
-int uart_available(void) { return (UCSR0A & (1 << RXC0)); }
-
-void clearBufferArray()
-{
-    for (int i = 0; i < BUFFER_SIZE; i++)
-        buffer[i] = 0;
-}
-
-void twi_init_slave(uint8_t address)
-{
-    // 1. Définir l'adresse de l'esclave (TWI Address Register)
-    TWAR = (address << 1);
-
-    // 2. Activer le TWI (TWEN)
-    // Activer les interruptions TWI (TWIE)
-    // Activer l'ACK (TWEA) pour répondre à l'adresse
-    TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWEA);
-}
-
-ISR(TWI_vect)
-{
-    uint8_t status = TWSR & 0xF8; // Masquer les bits de prescaler
-
-    switch (status)
-    {
-
-    // --- MASTER WRITE (RÉCEPTION DE COMMANDE) ---
-    case 0x60:           // SLA+W reçu, ACK envoyé
-    case 0x68:           // Arbitration perdu mais SLA+W reçu, ACK envoyé
-        twi_command = 0; // Réinitialiser la commande
-        TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE) | (1 << TWEA);
-        // TWCR configuré par défaut à la fin du switch (TWEN | TWIE | TWEA)
-        break;
-
-    case 0x80:
-        twi_command = TWDR;
-        if ((twi_command == 0x03) && (card_detected == 1))
-            send_card_uid = 1;
-        if ((twi_command == 0x01)) send_in = 1;
-        if ((twi_command == 0x02)) send_out = 1;
-        TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE);
-        break;
-
-    // --- MASTER READ (TRANSMISSION DE L'UID) ---
-    case 0xA8: // SLA+R reçu, ACK envoyé
-    case 0xB0: // Arbitration perdu mais SLA+R reçu, ACK envoyé
-        if (send_card_uid)
-        {
-            // La commande 0x03 a été reçue. Préparer l'envoi de l'UID.
-            twi_data_index = 0;
-            TWDR = current_uid[twi_data_index]; // Envoyer le premier byte
-            twi_data_index++;
-
-            // Si ce n'est pas le dernier byte, on garde TWEA (ACK) actif
-            if (twi_data_index < UID_SIZE) TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE) | (1 << TWEA);
-            else  // Sinon, NACK (pour le dernier byte)
-            {
-                TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE);
-                send_card_uid = 0;
-            }
-        }
-        else if (send_in)
-        {
-            cli();
-            TWDR = in;
-            in = 0;
-            send_in = 0;
-            sei();
-            TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE);
-        }
-        else if (send_out)
-        {
-            cli()
-            TWDR = out;
-            out = 0;
-            send_out = 0;
-            sei();
-            TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE);
-        }
-        else // Commande non reconnue ou aucune commande. Envoyer une valeur par défaut.
-        {
-            TWDR = 0x1A;
-            TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE); // NACK (fin de transmission)
-        }
-        break;
-
-    case 0xB8: // Byte de donnée transmis, ACK reçu (le Maître veut le suivant)
-        if ((send_card_uid) && (twi_data_index < UID_SIZE))
-        {
-            TWDR = current_uid[twi_data_index]; // Envoyer le byte suivant
-            twi_data_index++;
-
-            if (twi_data_index == UID_SIZE) TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE); // NACK final
-            else TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE) | (1 << TWEA); // ACK prochain
-        }
-        else
-        {
-            TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE); // Plus de données, mais le Maître veut quand même lire. NACK et attendre.
-            send_card_uid = 0;
-        }
-        break;
-
-    case 0xC0: // Byte transmis, NACK reçu (Fin de la lecture par le Maître)
-    case 0xA0: // STOP ou Repeated START
-    default:
-        // Rendre le contrôle du bus, attendre le prochain START
-        TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWIE) | (1 << TWEA);
-        break;
-    }
+    uint8_t receivedByte = UDR0; // Lire le registre de données UART
+    rfidReader.processIncomingByte(receivedByte);
 }
 
 int main(void)
 {
-    // DDRD |= (doorLed | greenLed); // PD2 and PD4 as outputs
-    // DDRD &= ~ultrasoundSensor;    // PD6 as input
-    // DDRB &= ~(RFIDReader | MasterDevice); // PB0 (D8) and PB2 (D10) as inputs
 
-    // activer les ports A0 A1 et A2 comme sorties
-    DDRC |= (1 << DDC0) | (1 << DDC1) | (1 << DDC2);
-    // allumer les IR emitter sur les ports A0 et A1
-    PORTC |= (1 << PORTC0) | (1 << PORTC1);
+    PORTD = IR_EMITTER_A;
 
-    // initialisation des registres d'interruption INT0 et IN1
-    DDRD=0b11110011; // D2 et D3 en tant qu'inputs
-    EICRA=0b00001010; // INT0 et INT1 setups en front descendant
-    // on active INT0 et INT1
+    DDRD = 0b11111011;
+    EICRA = 0b00000010;
     EIMSK |= (1 << INT0);
-    EIMSK |= (1 << INT1);
 
-    uart_init(); // UART Matériel (PC)
-    twi_init_slave(TWI_SLAVE_ADDRESS); // TWI Slave (I2C)
+    // uart_init(); // UART Matériel (PC)
+    rfidReader.init();
+    Wire.begin(SLAVE_ADRESS);
+    Wire.onReceive(receiveEvent);
+    Wire.onRequest(requestEvent);
     sei();
-    PORTD = 0;
 
     // Create tasks
     xTaskCreate(RFIDReadTask, "RFIDReadTask", 128, NULL, tskIDLE_PRIORITY + 1, NULL);
-    xTaskCreate(TraversalDirectionTask, "TraversalDirectionTask", 128, NULL, tskIDLE_PRIORITY + 1, NULL);
     xTaskCreate(ActivateActuatorTask, "ActivateActuatorTask", 128, NULL, tskIDLE_PRIORITY + 1, NULL);
 
-    // Start scheduler.
     vTaskStartScheduler();
-
     return 0;
+}
+
+void receiveEvent(int howMany)
+{
+    if (!Wire.available()) return;
+
+    char command = Wire.read();
+
+    if (command == 'F') activate_actuator = 1;
+}
+
+void requestEvent()
+{
+    Wire.write((const uint8_t *)current_uid, UID_SIZE);
+    for (int i = 0; i < UID_SIZE; i++) current_uid[i] = 0;
+}
+
+static void RFIDReadTask(void *pvParameters)
+{
+    while(1)
+    {
+        if (rfidReader.isUidAvailable())
+        {
+            const uint8_t* uid = rfidReader.getUidBuffer();
+            uint8_t len = rfidReader.getUidLength();
+
+            for (int i=0; i<len; i++) current_uid[i] = uid[i];
+        }
+    }
 }
 
 static void ActivateActuatorTask(void *pvParameters)
 {
-    if (activate_actuator) PORTC |= (1 << PORTC2);
-}
-// Minimal implementation so the project links
-static void RFIDReadTask(void *pvParameters)
-{
-    (void)pvParameters;
-    while (1)
+    while(1)
     {
-        // ======tache 1======
-        // reception infos carte
-        if (uart_available())
-        { // Si des données arrivent sur le port série
-            count = 0;
-            // Lecture des données dans le tableau (lecture en rafale)
-            while (uart_available() && count < BUFFER_SIZE) { buffer[count++] = uart_receive(); }
-
-            // Écriture du tampon (envoi en rafale au PC)
-            for (int i = 0; i < count; i++)
-            {
-                current_uid[i] = buffer[i];
-                uart_transmit(buffer[i]);
-            }
-
-            // Nettoyage et réinitialisation
-            clearBufferArray();
-            count = 0;
-        }
-        // ======tache 1======
-    }
-}
-
-static void TraversalDirectionTask(void *pvParameters)
-{
-    (void)pvParameters;
-    uint8_t first = 0; // 1 si A, 2 si B
-    // A -> B, un utilisateur rentre
-    // B -> A, un utilisateur sort
-    while (1)
-    {
-        if (State_IR_A && State_IR_B)
+        if (activate_actuator)
         {
-            if (first == 1) in += 1;
-            else if (first == 2) out += 1;
-            State_IR_A = 0;
-            State_IR_B = 0;
+            PORTD |= blueLED;
+            _delay_ms(100);
+            PORTD &= ~(blueLED);
+            activate_actuator = 0;
         }
-        else if (State_IR_A) first = 1;
-        else if (State_IR_B) first = 2;
     }
 }
+
+// Minimal implementation so the project links
+// static void RFIDReadTask(void *pvParameters)
+// {
+//     while (1)
+//     {
+//         // ======tache 1======
+//         // reception infos carte
+//         if (uart_available())
+//         { // Si des données arrivent sur le port série
+//             count = 0;
+//             taskENTER_CRITICAL();
+//             // Lecture des données dans le tableau (lecture en rafale)
+//             while (uart_available() && count < UID_SIZE) { buffer[count++] = uart_receive(); }
+
+//             // Écriture du tampon (envoi en rafale au PC)
+//             for (int i = 0; i < count; i++) current_uid[i] = buffer[i];
+
+//             // Nettoyage et réinitialisation
+//             clearBufferArray();
+
+//             for (int i = 0; i < count; i++) uart_transmit(current_uid[i]);
+//             card_detected = 1;
+//             count = 0;
+//             taskEXIT_CRITICAL();
+//         }
+//         // ======tache 1======
+//     }
+// }
+
+// static void TraversalDirectionTask(void *pvParameters)
+// {
+//     (void)pvParameters;
+//     uint8_t first = 0; // 1 si A, 2 si B
+//     // A -> B, un utilisateur rentre
+//     // B -> A, un utilisateur sort
+//     while (1)
+//     {
+//         if (State_IR_A)
+//         {
+//             PORTD ^= blueLED;
+//             cli();
+//             nb_passage++;
+//             uart_transmit((unsigned char)nb_passage);
+//             State_IR_A = 0;
+//             sei();
+//         }
+//         // if (State_IR_A && State_IR_B)
+//         // {
+//         //     if (first == 1) in += 1;
+//         //     else if (first == 2) out += 1;
+//         //     State_IR_A = 0;
+//         //     State_IR_B = 0;
+//         // }
+//         // else if (State_IR_A) first = 1;
+//         // else if (State_IR_B) first = 2;
+//         // uart_transmit((unsigned char) State_IR_A);
+//         // uart_transmit((unsigned char) State_IR_B);
+//     }
+// }
