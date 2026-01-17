@@ -1,5 +1,5 @@
 Build/
-Arduino_FreeRTOS/arduinoLibsAndCore
-Arduino_FreeRTOS/FreeRTOS-Kernel
+Arduino_UNO/arduinoLibsAndCore
+Arduino_UNO/FreeRTOS-Kernel
 .vscode/
 */.venv
