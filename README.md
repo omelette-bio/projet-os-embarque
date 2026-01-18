@@ -1,11 +1,10 @@
 # projet-os-embarque
 
-- je me rappelle plus comment on setup le projet cote arduino
 ## demarrer le projet sur arduino
 
-executer la commande pour decompresser le core arduino et freertos
+executer la commande à la racine du projet pour decompresser le core arduino et freertos
 ```bash
-./init.sh
+./install_dep.sh
 ```
 
 compiler le code source arduino avr-gcc et upload SANS brancher le capteur sur le port UART (sinon ça marche pas)
