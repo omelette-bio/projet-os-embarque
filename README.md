@@ -60,3 +60,8 @@ et ensuite
 ```bash
 pip install -r requirements.txt
 ```
+
+et enfin pour démarrer le programme
+```bash
+python3 main.py
+``` 
