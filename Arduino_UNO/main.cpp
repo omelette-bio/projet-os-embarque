@@ -27,7 +27,7 @@ void requestEvent();
 
 // Adresse I2C de l'Arduino, à modifier pour simuler différentes salles
 // 0x42 -> entre, 0x43 -> entre pas, 0x44 -> entre pas
-#define SLAVE_ADRESS 0x43 
+#define SLAVE_ADRESS 0x43
 
 // Les actionneurs
 const uint8_t blueLED       = _BV(PD5);
@@ -204,16 +204,16 @@ static void ActivateActuatorTask(void *pvParameters)
     {
         if (activate_actuator_ok)
         {
-            PORTD |= blueLED;
+            PORTD |= buzzer;
             _delay_ms(100);
-            PORTD &= ~(blueLED);
+            PORTD &= ~(buzzer);
             activate_actuator_ok = 0;
         }
         else if (activate_actuator_not_ok)
         {
-            PORTD |= buzzer;
+            PORTD |= blueLED;
             _delay_ms(100);
-            PORTD &= ~(buzzer);
+            PORTD &= ~(blueLED);
             activate_actuator_not_ok = 0;
         }
         vTaskDelay(pdMS_TO_TICKS(50));

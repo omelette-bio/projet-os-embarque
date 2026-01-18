@@ -8,7 +8,7 @@ services:
       - "9001:9001"
     volumes:
       - ./mqtt_broker/config:/mosquitto/config
-  
+
   influxdb:
     image: influxdb:latest
     container_name: influxdb
@@ -17,9 +17,9 @@ services:
     environment:
       # Initialisation automatique (optionnel mais pratique)
       - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=mon_user
-      - DOCKER_INFLUXDB_INIT_PASSWORD=mon_password_tres_sur
-      - DOCKER_INFLUXDB_INIT_ORG=ma_maison
-      - DOCKER_INFLUXDB_INIT_BUCKET=capteurs
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=admin
+      - DOCKER_INFLUXDB_INIT_ORG=mes_bureaux
+      - DOCKER_INFLUXDB_INIT_BUCKET=salles
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=mon-super-token-admin
     restart: always
