@@ -20,6 +20,8 @@ make upload
 - i2c
 
 ### lancer le maitre i2c
+déplacez d'abord le contenu du dossier `Raspberry_Pi3` sur votre Raspberry
+
 demarrer un environnement virtuel python (optionnel)
 ```bash
 python3 -m venv .venv
