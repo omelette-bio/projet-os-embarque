@@ -33,12 +33,12 @@ pip install -r requirements.txt
 
 enfin pour démarrer le maitre i2c
 ```bash
-python3 main.py <adresses esclaves i2c> <ip broker mqtt>
+python3 main.py <ip broker mqtt>
 ```
-par exemple, si je dois me connecter aux esclaves 66 67 et 68 et au broker mqtt localhost
+par exemple, si je dois me connecter au broker mqtt localhost
 
 ```bash
-python3 main.py 66 67 68 localhost
+python3 main.py localhost
 ```
 
 ## démarrer le fog
