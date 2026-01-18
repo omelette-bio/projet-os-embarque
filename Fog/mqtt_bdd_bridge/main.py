@@ -10,9 +10,9 @@ MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 
 token = "mon-super-token-admin"
-org = "ma_maison"
+org = "mes_bureaux"
 url = "http://localhost:8086"
-bucket = "capteurs"
+bucket = "salles"
 
 client = InfluxDBClient(url=url, token=token, org=org)
 write_api = client.write_api(write_options=SYNCHRONOUS)
