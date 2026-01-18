@@ -15,7 +15,7 @@ make upload
 ```
 
 ## démarrer la passerelle
-### installer les dépendances
+### installer les packages nécessaires
 - mosquitto
 - sqlite3
 - i2c
@@ -29,7 +29,7 @@ source .venv/bin/activate
 
 installer les requirements
 ```bash
-pip -r requirements.txt
+pip install -r requirements.txt
 ```
 
 enfin pour démarrer le maitre i2c
@@ -42,17 +42,21 @@ par exemple, si je dois me connecter aux esclaves 66 67 et 68 et au broker mqtt 
 python3 main.py 66 67 68 localhost
 ```
 
-## demarrer et tester le broker mqtt
-
-```
-cd mqtt_broker
+## démarrer le fog
+### démarrer la base de données et le broker MQTT
+se placer dans le répertoire `Fog/` et exécuter la commande
+```bash
 docker compose up -d
 ```
-écouter les messages sur le topic `topix`
+qui devrait démarrer la base de données InfluxDB et le broker MQTT
+
+### démarrer le consumer mqtt
+se placer dans le répertoire `Fog/bridge_mqtt_bdd`, puis installer les dépendances python, donc pour cela, démarrer un environnement virtuel python (optionnel)
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 ```
-docker exec -it mosquitto mosquitto_sub -t "topix"
-```
-envoyer le message `msg` sur le topic `topix`
-```
-docker exec -it mosquitto mosquitto_pub -t "topix" -m "msg"
+et ensuite
+```bash
+pip install -r requirements.txt
 ```
